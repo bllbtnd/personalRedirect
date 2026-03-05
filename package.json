@@ -1,0 +1,18 @@
+{
+  "name": "personalredirect",
+  "version": "1.0.0",
+  "description": "D1-backed URL redirector with admin UI",
+  "main": "src/index.js",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:create": "wrangler d1 create redirect_db",
+    "db:init": "wrangler d1 execute redirect_db --file=./schema.sql"
+  },
+  "keywords": ["cloudflare", "workers", "d1", "url-shortener"],
+  "author": "Botond Balla",
+  "license": "MIT",
+  "devDependencies": {
+    "wrangler": "^3.0.0"
+  }
+}

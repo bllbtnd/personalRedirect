@@ -1,0 +1,18 @@
+name = "personal-redirect"
+main = "src/index.js"
+compatibility_date = "2024-01-01"
+compatibility_flags = [ "nodejs_compat" ]
+
+# Environment Variables
+vars = { ADMIN_USERNAME = "admin" }
+
+# D1 Database Binding
+[[d1_databases]]
+binding = "DB"
+database_name = "redirect_db"
+database_id = "5072a8d7-9544-4b74-a375-1066c9636bc8"
+
+# Custom Domain Routing
+[[routes]]
+pattern = "redirect.ballabotond.com"
+custom_domain = true
