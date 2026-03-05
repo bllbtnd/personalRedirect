@@ -11,6 +11,7 @@ Create short links, track clicks, generate QR codes, and manage them all in one 
 3. **Share**: Send the short link to others
 4. **QR Code**: Download a QR code for any link with one click
 5. **Track**: See how many times your link was clicked
-6. **Delete**: Remove links anytime
+6. **Edit**: Change both the slug and destination URL anytime
+7. **Delete**: Remove links anytime
 
 The admin panel is password-protected. Public redirects work without needing to log in.

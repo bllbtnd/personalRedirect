@@ -10,7 +10,7 @@ export default {
     const path = url.pathname;
 
     // Check authentication for admin routes
-    if (path === '/admin' || path === '/api/add' || path === '/api/delete') {
+    if (path === '/admin' || path === '/api/add' || path === '/api/delete' || path === '/api/edit') {
       const authCheck = await checkAuth(request, env);
       if (!authCheck.authenticated) {
         return authCheck.response;
@@ -30,6 +30,11 @@ export default {
     // POST /api/delete - Delete a redirect link
     if (path === '/api/delete' && request.method === 'POST') {
       return handleDeleteLink(request, env);
+    }
+
+    // POST /api/edit - Edit a redirect link
+    if (path === '/api/edit' && request.method === 'POST') {
+      return handleEditLink(request, env);
     }
 
     // GET /:slug - Redirect to destination (public)
@@ -154,9 +159,12 @@ async function handleAdmin(env) {
           <td><a href="${link.url}" target="_blank">${link.url}</a></td>
           <td>${link.clicks}</td>
           <td>
-            <button type="button" class="copy-btn" onclick="copyToClipboard('https://redirect.ballabotond.com/${link.slug}')">Copy</button>
-            <button type="button" class="qr-btn" onclick="downloadQR('https://redirect.ballabotond.com/${link.slug}', '${link.slug}')">QR</button>
-            <button type="button" class="delete-btn" onclick="showDeleteConfirm('${link.slug}')">Delete</button>
+            <div class="action-buttons">
+              <button type="button" class="action-btn" onclick="copyToClipboard('https://redirect.ballabotond.com/${link.slug}')">Copy</button>
+              <button type="button" class="action-btn" onclick="downloadQR('https://redirect.ballabotond.com/${link.slug}', '${link.slug}')">QR</button>
+              <button type="button" class="action-btn" onclick="showEditModal('${link.slug}', '${link.url.replace(/'/g, "\\'")}')">Edit</button>
+              <button type="button" class="action-btn action-btn-delete" onclick="showDeleteConfirm('${link.slug}')">Delete</button>
+            </div>
           </td>
         </tr>
       `
@@ -263,53 +271,34 @@ async function handleAdmin(env) {
     button:active {
       background: #555;
     }
-    .delete-btn {
+    .action-buttons {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.25rem;
+    }
+    .action-btn {
       padding: 0.25rem 0.5rem;
+      background: #000;
+      color: #fff;
+      border: 1px solid #000;
+      font-size: 0.75rem;
+      cursor: pointer;
+      white-space: nowrap;
+      font-family: inherit;
+    }
+    .action-btn:hover {
+      background: #333;
+    }
+    .action-btn:active {
+      background: #555;
+    }
+    .action-btn-delete {
       background: #fff;
       color: #000;
-      border: 1px solid #000;
-      font-size: 0.75rem;
-      cursor: pointer;
-      white-space: nowrap;
     }
-    .delete-btn:hover {
+    .action-btn-delete:hover {
       background: #000;
       color: #fff;
-    }
-    .delete-btn:active {
-      background: #333;
-    }
-    .copy-btn {
-      padding: 0.25rem 0.5rem;
-      background: #000;
-      color: #fff;
-      border: 1px solid #000;
-      font-size: 0.75rem;
-      cursor: pointer;
-      margin-right: 0.25rem;
-      white-space: nowrap;
-    }
-    .copy-btn:hover {
-      background: #333;
-    }
-    .copy-btn:active {
-      background: #555;
-    }
-    .qr-btn {
-      padding: 0.25rem 0.5rem;
-      background: #000;
-      color: #fff;
-      border: 1px solid #000;
-      font-size: 0.75rem;
-      cursor: pointer;
-      margin-right: 0.25rem;
-      white-space: nowrap;
-    }
-    .qr-btn:hover {
-      background: #333;
-    }
-    .qr-btn:active {
-      background: #555;
     }
     .toast {
       position: fixed;
@@ -462,29 +451,12 @@ async function handleAdmin(env) {
       th, td {
         padding: 0.5rem;
       }
-      .delete-btn {
-        padding: 0.2rem 0.4rem;
+      .action-buttons {
+        grid-template-columns: 1fr;
+      }
+      .action-btn {
+        padding: 0.3rem 0.5rem;
         font-size: 0.7rem;
-      }
-      .copy-btn {
-        padding: 0.2rem 0.4rem;
-        font-size: 0.7rem;
-        margin-right: 0.15rem;
-      }
-      .qr-btn {
-        padding: 0.2rem 0.4rem;
-        font-size: 0.7rem;
-        margin-right: 0.15rem;
-      }
-      .modal-content {
-        min-width: 250px;
-      }
-      .modal-buttons {
-        flex-direction: column;
-        gap: 0.5rem;
-      }
-      .modal-btn {
-        width: 100%;
       }
     }
   </style>
@@ -550,9 +522,25 @@ async function handleAdmin(env) {
         </div>
       </div>
     </div>
+    <div id="editModal" class="modal-overlay">
+      <div class="modal-content">
+        <p style="margin-bottom: 1rem; font-weight: 600;">Edit Link</p>
+        <div style="text-align: left; margin-bottom: 1rem;">
+          <label style="display: block; margin-bottom: 0.25rem; font-size: 0.875rem;">Slug:</label>
+          <input type="text" id="editSlugInput" style="width: 100%; padding: 0.5rem; border: 1px solid #000; font-size: 0.875rem; margin-bottom: 1rem;" placeholder="slug">
+          <label style="display: block; margin-bottom: 0.25rem; font-size: 0.875rem;">Destination URL:</label>
+          <input type="url" id="editUrlInput" style="width: 100%; padding: 0.5rem; border: 1px solid #000; font-size: 0.875rem;" placeholder="https://example.com">
+        </div>
+        <div class="modal-buttons">
+          <button class="modal-btn modal-btn-confirm" onclick="confirmEdit()">Save</button>
+          <button class="modal-btn modal-btn-cancel" onclick="cancelEdit()">Cancel</button>
+        </div>
+      </div>
+    </div>
   </div>
   <script>
     let pendingDeleteSlug = null;
+    let pendingEditSlug = null;
 
     function showToast(message) {
       const toast = document.createElement('div');
@@ -595,6 +583,49 @@ async function handleAdmin(env) {
     function cancelDelete() {
       pendingDeleteSlug = null;
       document.getElementById('deleteModal').classList.remove('active');
+    }
+
+    function showEditModal(slug, url) {
+      pendingEditSlug = slug;
+      document.getElementById('editSlugInput').value = slug;
+      document.getElementById('editUrlInput').value = url;
+      document.getElementById('editModal').classList.add('active');
+    }
+
+    function confirmEdit() {
+      const newSlug = document.getElementById('editSlugInput').value;
+      const newUrl = document.getElementById('editUrlInput').value;
+      if (!newSlug || !newUrl) {
+        showToast('Slug and URL are required');
+        return;
+      }
+      if (pendingEditSlug) {
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '/api/edit';
+        const oldSlugInput = document.createElement('input');
+        oldSlugInput.type = 'hidden';
+        oldSlugInput.name = 'oldSlug';
+        oldSlugInput.value = pendingEditSlug;
+        const newSlugInput = document.createElement('input');
+        newSlugInput.type = 'hidden';
+        newSlugInput.name = 'newSlug';
+        newSlugInput.value = newSlug;
+        const urlInput = document.createElement('input');
+        urlInput.type = 'hidden';
+        urlInput.name = 'url';
+        urlInput.value = newUrl;
+        form.appendChild(oldSlugInput);
+        form.appendChild(newSlugInput);
+        form.appendChild(urlInput);
+        document.body.appendChild(form);
+        form.submit();
+      }
+    }
+
+    function cancelEdit() {
+      pendingEditSlug = null;
+      document.getElementById('editModal').classList.remove('active');
     }
 
     function downloadQR(url, slug) {
@@ -687,6 +718,72 @@ async function handleAddLink(request, env) {
     return Response.redirect(new URL('/admin', request.url).toString(), 302);
   } catch (error) {
     return new Response(`Error adding link: ${error.message}`, {
+      status: 500,
+      headers: { 'Content-Type': 'text/plain' },
+    });
+  }
+}
+
+/**
+ * Handle POST /api/edit - Edit a redirect link
+ */
+async function handleEditLink(request, env) {
+  try {
+    const formData = await request.formData();
+    const oldSlug = formData.get('oldSlug');
+    const newSlug = formData.get('newSlug');
+    const url = formData.get('url');
+
+    if (!oldSlug || !newSlug || !url) {
+      return new Response('Old slug, new slug, and URL are required', { status: 400 });
+    }
+
+    // Validate URL format
+    try {
+      new URL(url);
+    } catch {
+      return new Response('Invalid URL format', { status: 400 });
+    }
+
+    // Validate slug format (alphanumeric only)
+    if (!/^[a-zA-Z0-9]+$/.test(newSlug)) {
+      return new Response('Slug must be alphanumeric', { status: 400 });
+    }
+
+    // If slug is changing, check if new slug already exists
+    if (oldSlug !== newSlug) {
+      const existing = await env.DB.prepare(
+        'SELECT slug FROM links WHERE slug = ?'
+      ).bind(newSlug).first();
+
+      if (existing) {
+        return new Response('Slug already exists', { status: 409 });
+      }
+
+      // Get the clicks count from the old slug
+      const oldLink = await env.DB.prepare(
+        'SELECT clicks FROM links WHERE slug = ?'
+      ).bind(oldSlug).first();
+
+      // Delete old slug and insert with new slug, preserving clicks
+      await env.DB.prepare(
+        'DELETE FROM links WHERE slug = ?'
+      ).bind(oldSlug).run();
+
+      await env.DB.prepare(
+        'INSERT INTO links (slug, url, clicks) VALUES (?, ?, ?)'
+      ).bind(newSlug, url, oldLink?.clicks || 0).run();
+    } else {
+      // Just update the URL if slug hasn't changed
+      await env.DB.prepare(
+        'UPDATE links SET url = ? WHERE slug = ?'
+      ).bind(url, oldSlug).run();
+    }
+
+    // Redirect back to admin
+    return Response.redirect(new URL('/admin', request.url).toString(), 302);
+  } catch (error) {
+    return new Response(`Error editing link: ${error.message}`, {
       status: 500,
       headers: { 'Content-Type': 'text/plain' },
     });
