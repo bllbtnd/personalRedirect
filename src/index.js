@@ -42,6 +42,11 @@ export default {
       return handleGetAnalytics(url, env);
     }
 
+    // GET /favicon.ico - Serve favicon
+    if (path === '/favicon.ico') {
+      return handleFavicon();
+    }
+
     // GET /:slug - Redirect to destination (public)
     if (path !== '/' && request.method === 'GET') {
       const slug = path.substring(1); // Remove leading /
@@ -184,6 +189,7 @@ async function handleAdmin(env) {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>URL Redirector Admin</title>
+  <link rel="icon" href="/favicon.ico" type="image/svg+xml">
   <style>
     * {
       margin: 0;
@@ -1013,6 +1019,24 @@ async function handleGetAnalytics(url, env) {
       headers: { 'Content-Type': 'application/json' },
     });
   }
+}
+
+/**
+ * Handle GET /favicon.ico - Serve SVG favicon
+ */
+function handleFavicon() {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+    <rect width="100" height="100" fill="#000"/>
+    <path d="M30 50 L60 30 L60 70 Z" fill="#fff"/>
+    <path d="M65 40 L70 40 L70 60 L65 60 Z" fill="#fff"/>
+  </svg>`;
+  
+  return new Response(svg, {
+    headers: {
+      'Content-Type': 'image/svg+xml',
+      'Cache-Control': 'public, max-age=86400',
+    },
+  });
 }
 
 /**
