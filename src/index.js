@@ -1168,6 +1168,17 @@ async function captureAnalytics(slug, request, env) {
       cfDataJson
     ).run();
     
+    // Clean up old records - keep only the last 100 for this slug
+    await env.DB.prepare(`
+      DELETE FROM analytics
+      WHERE slug = ? AND id NOT IN (
+        SELECT id FROM analytics 
+        WHERE slug = ?
+        ORDER BY timestamp DESC
+        LIMIT 100
+      )
+    `).bind(slug, slug).run();
+    
   } catch (error) {
     // Don't fail the redirect if analytics capture fails
     console.error('Analytics capture error:', error);
