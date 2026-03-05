@@ -4,7 +4,7 @@ compatibility_date = "2024-01-01"
 compatibility_flags = [ "nodejs_compat" ]
 
 # Environment Variables
-vars = { ADMIN_USERNAME = "admin" }
+vars = { ADMIN_USERNAME = "botond" }
 
 # D1 Database Binding
 [[d1_databases]]
