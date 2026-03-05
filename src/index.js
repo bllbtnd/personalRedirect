@@ -155,6 +155,7 @@ async function handleAdmin(env) {
           <td>${link.clicks}</td>
           <td>
             <button type="button" class="copy-btn" onclick="copyToClipboard('https://redirect.ballabotond.com/${link.slug}')">Copy</button>
+            <button type="button" class="qr-btn" onclick="downloadQR('https://redirect.ballabotond.com/${link.slug}', '${link.slug}')">QR</button>
             <button type="button" class="delete-btn" onclick="showDeleteConfirm('${link.slug}')">Delete</button>
           </td>
         </tr>
@@ -292,6 +293,22 @@ async function handleAdmin(env) {
       background: #333;
     }
     .copy-btn:active {
+      background: #555;
+    }
+    .qr-btn {
+      padding: 0.25rem 0.5rem;
+      background: #000;
+      color: #fff;
+      border: 1px solid #000;
+      font-size: 0.75rem;
+      cursor: pointer;
+      margin-right: 0.25rem;
+      white-space: nowrap;
+    }
+    .qr-btn:hover {
+      background: #333;
+    }
+    .qr-btn:active {
       background: #555;
     }
     .toast {
@@ -454,6 +471,11 @@ async function handleAdmin(env) {
         font-size: 0.7rem;
         margin-right: 0.15rem;
       }
+      .qr-btn {
+        padding: 0.2rem 0.4rem;
+        font-size: 0.7rem;
+        margin-right: 0.15rem;
+      }
       .modal-content {
         min-width: 250px;
       }
@@ -573,6 +595,28 @@ async function handleAdmin(env) {
     function cancelDelete() {
       pendingDeleteSlug = null;
       document.getElementById('deleteModal').classList.remove('active');
+    }
+
+    function downloadQR(url, slug) {
+      // Use QR Server API to generate QR code
+      const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=512x512&data=' + encodeURIComponent(url);
+      
+      // Fetch the QR code image and download it
+      fetch(qrUrl)
+        .then(response => response.blob())
+        .then(blob => {
+          const blobUrl = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.download = 'qr-' + slug + '.png';
+          link.href = blobUrl;
+          link.click();
+          URL.revokeObjectURL(blobUrl);
+          showToast('QR code downloaded');
+        })
+        .catch(error => {
+          console.error('QR generation error:', error);
+          showToast('Failed to generate QR code');
+        });
     }
   </script>
 </body>
