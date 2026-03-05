@@ -10,7 +10,7 @@ export default {
     const path = url.pathname;
 
     // Check authentication for admin routes
-    if (path === '/admin' || path === '/api/add' || path === '/api/delete' || path === '/api/edit') {
+    if (path === '/admin' || path === '/api/add' || path === '/api/delete' || path === '/api/edit' || path === '/api/analytics') {
       const authCheck = await checkAuth(request, env);
       if (!authCheck.authenticated) {
         return authCheck.response;
@@ -37,10 +37,15 @@ export default {
       return handleEditLink(request, env);
     }
 
+    // GET /api/analytics - Get analytics for a slug
+    if (path === '/api/analytics' && request.method === 'GET') {
+      return handleGetAnalytics(url, env);
+    }
+
     // GET /:slug - Redirect to destination (public)
     if (path !== '/' && request.method === 'GET') {
       const slug = path.substring(1); // Remove leading /
-      return handleRedirect(slug, env);
+      return handleRedirect(slug, env, request);
     }
 
     // Default response for root
@@ -162,6 +167,7 @@ async function handleAdmin(env) {
             <div class="action-buttons">
               <button type="button" class="action-btn" onclick="copyToClipboard('https://redirect.ballabotond.com/${link.slug}')">Copy</button>
               <button type="button" class="action-btn" onclick="downloadQR('https://redirect.ballabotond.com/${link.slug}', '${link.slug}')">QR</button>
+              <button type="button" class="action-btn" onclick="showAnalytics('${link.slug}')">Analytics</button>
               <button type="button" class="action-btn" onclick="showEditModal('${link.slug}', '${link.url.replace(/'/g, "\\'")}')">Edit</button>
               <button type="button" class="action-btn action-btn-delete" onclick="showDeleteConfirm('${link.slug}')">Delete</button>
             </div>
@@ -537,6 +543,17 @@ async function handleAdmin(env) {
         </div>
       </div>
     </div>
+    <div id="analyticsModal" class="modal-overlay">
+      <div class="modal-content" style="max-width: 90%; width: 900px; max-height: 80vh; overflow-y: auto;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+          <h3 style="margin: 0;">Analytics</h3>
+          <button class="modal-btn modal-btn-cancel" onclick="closeAnalytics()">✕</button>
+        </div>
+        <div id="analyticsContent" style="text-align: left;">
+          Loading...
+        </div>
+      </div>
+    </div>
   </div>
   <script>
     let pendingDeleteSlug = null;
@@ -626,6 +643,143 @@ async function handleAdmin(env) {
     function cancelEdit() {
       pendingEditSlug = null;
       document.getElementById('editModal').classList.remove('active');
+    }
+
+    async function showAnalytics(slug) {
+      document.getElementById('analyticsModal').classList.add('active');
+      document.getElementById('analyticsContent').innerHTML = 'Loading...';
+      
+      try {
+        const response = await fetch('/api/analytics?slug=' + encodeURIComponent(slug));
+        const data = await response.json();
+        
+        if (data.error) {
+          document.getElementById('analyticsContent').innerHTML = '<p style="color: red;">Error: ' + data.error + '</p>';
+          return;
+        }
+        
+        if (!data.analytics || data.analytics.length === 0) {
+          document.getElementById('analyticsContent').innerHTML = '<p>No analytics data available for this link yet.</p>';
+          return;
+        }
+        
+        let html = '<h4 style="margin-bottom: 1rem;">Click Details (Last 100)</h4>';
+        html += '<div style="max-height: 500px; overflow-y: auto;">';
+        
+        data.analytics.forEach((record, index) => {
+          const date = new Date(record.timestamp);
+          
+          // Clickable timestamp header
+          html += '<div style="border: 1px solid #ddd; margin-bottom: 0.5rem; background: #fff;">';
+          html += '<div onclick="toggleRecord(' + index + ')" style="padding: 0.75rem; cursor: pointer; background: #f5f5f5; font-weight: 600; display: flex; justify-content: space-between; align-items: center; user-select: none;">';
+          html += '<span>' + date.toLocaleString() + '</span>';
+          html += '<span id="arrow-' + index + '" style="transition: transform 0.2s;">▼</span>';
+          html += '</div>';
+          
+          // Collapsible details section (hidden by default)
+          html += '<div id="record-' + index + '" style="display: none; padding: 1rem; border-top: 1px solid #ddd;">';
+          html += '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; font-size: 0.875rem;">';
+          
+          // Network Information
+          if (record.ip_address || record.asn || record.as_organization) {
+            html += '<div style="grid-column: 1 / -1; font-weight: 600; margin-top: 0.5rem; color: #555;">Network</div>';
+            if (record.ip_address) html += '<div><strong>IP:</strong> ' + record.ip_address + '</div>';
+            if (record.asn) html += '<div><strong>ASN:</strong> ' + record.asn + '</div>';
+            if (record.as_organization) html += '<div style="grid-column: 1 / -1;"><strong>ISP:</strong> ' + record.as_organization + '</div>';
+          }
+          
+          // Geographic Location
+          if (record.continent || record.country || record.region || record.city || record.postal_code || record.timezone) {
+            html += '<div style="grid-column: 1 / -1; font-weight: 600; margin-top: 0.5rem; color: #555;">Location</div>';
+            if (record.continent) html += '<div><strong>Continent:</strong> ' + record.continent + '</div>';
+            if (record.country) html += '<div><strong>Country:</strong> ' + record.country + (record.is_eu_country ? ' (EU)' : '') + '</div>';
+            if (record.region) html += '<div><strong>Region:</strong> ' + record.region + (record.region_code ? ' (' + record.region_code + ')' : '') + '</div>';
+            if (record.city) html += '<div><strong>City:</strong> ' + record.city + '</div>';
+            if (record.postal_code) html += '<div><strong>Postal:</strong> ' + record.postal_code + '</div>';
+            if (record.timezone) html += '<div><strong>Timezone:</strong> ' + record.timezone + '</div>';
+            if (record.latitude && record.longitude) html += '<div style="grid-column: 1 / -1;"><strong>Coordinates:</strong> ' + record.latitude + ', ' + record.longitude + '</div>';
+            if (record.metro_code) html += '<div><strong>Metro:</strong> ' + record.metro_code + '</div>';
+          }
+          
+          // Request Information
+          if (record.request_method || record.request_url || record.query_string || record.http_protocol) {
+            html += '<div style="grid-column: 1 / -1; font-weight: 600; margin-top: 0.5rem; color: #555;">Request</div>';
+            if (record.request_method) html += '<div><strong>Method:</strong> ' + record.request_method + '</div>';
+            if (record.http_protocol) html += '<div><strong>Protocol:</strong> ' + record.http_protocol + '</div>';
+            if (record.request_url) html += '<div style="grid-column: 1 / -1;"><strong>URL:</strong> ' + record.request_url + '</div>';
+            if (record.query_string) html += '<div style="grid-column: 1 / -1;"><strong>Query:</strong> ' + record.query_string + '</div>';
+          }
+          
+          // Browser/Client Information
+          if (record.user_agent || record.referer || record.accept_language || record.accept_encoding || record.accept) {
+            html += '<div style="grid-column: 1 / -1; font-weight: 600; margin-top: 0.5rem; color: #555;">Client</div>';
+            if (record.user_agent) html += '<div style="grid-column: 1 / -1;"><strong>User Agent:</strong> ' + record.user_agent + '</div>';
+            if (record.referer) html += '<div style="grid-column: 1 / -1;"><strong>Referer:</strong> ' + record.referer + '</div>';
+            if (record.accept_language) html += '<div><strong>Language:</strong> ' + record.accept_language + '</div>';
+            if (record.accept_encoding) html += '<div><strong>Encoding:</strong> ' + record.accept_encoding + '</div>';
+            if (record.accept) html += '<div style="grid-column: 1 / -1;"><strong>Accept:</strong> ' + record.accept + '</div>';
+            if (record.connection) html += '<div><strong>Connection:</strong> ' + record.connection + '</div>';
+          }
+          
+          // Security/TLS Information
+          if (record.tls_version || record.tls_cipher) {
+            html += '<div style="grid-column: 1 / -1; font-weight: 600; margin-top: 0.5rem; color: #555;">Security</div>';
+            if (record.tls_version) html += '<div><strong>TLS:</strong> ' + record.tls_version + '</div>';
+            if (record.tls_cipher) html += '<div style="grid-column: 1 / -1;"><strong>Cipher:</strong> ' + record.tls_cipher + '</div>';
+          }
+          
+          // Cloudflare Information
+          if (record.cf_ray || record.cf_colo) {
+            html += '<div style="grid-column: 1 / -1; font-weight: 600; margin-top: 0.5rem; color: #555;">Cloudflare</div>';
+            if (record.cf_ray) html += '<div><strong>Ray ID:</strong> ' + record.cf_ray + '</div>';
+            if (record.cf_colo) html += '<div><strong>Data Center:</strong> ' + record.cf_colo + '</div>';
+          }
+          
+          // Add expandable section for raw data dumps
+          html += '<div style="grid-column: 1 / -1; margin-top: 1rem; padding-top: 0.5rem; border-top: 1px solid #ddd;">';
+          if (record.all_headers) {
+            html += '<button onclick="toggleData(' + index + ', &quot;headers&quot;)" style="font-size: 0.75rem; padding: 0.25rem 0.5rem; background: #000; color: #fff; border: none; cursor: pointer; margin-right: 0.5rem;">All Headers</button>';
+            html += '<pre id="headers-' + index + '" style="display: none; margin-top: 0.5rem; padding: 0.5rem; background: #fff; border: 1px solid #ddd; overflow-x: auto; font-size: 0.75rem;">' + record.all_headers + '</pre>';
+          }
+          if (record.cf_data_json) {
+            html += '<button onclick="toggleData(' + index + ', &quot;cf&quot;)" style="font-size: 0.75rem; padding: 0.25rem 0.5rem; background: #000; color: #fff; border: none; cursor: pointer;">CF Data</button>';
+            html += '<pre id="cf-' + index + '" style="display: none; margin-top: 0.5rem; padding: 0.5rem; background: #fff; border: 1px solid #ddd; overflow-x: auto; font-size: 0.75rem;">' + record.cf_data_json + '</pre>';
+          }
+          html += '</div>';
+          
+          html += '</div></div></div>';
+        });
+        
+        html += '</div>';
+        document.getElementById('analyticsContent').innerHTML = html;
+      } catch (error) {
+        document.getElementById('analyticsContent').innerHTML = '<p style="color: red;">Failed to load analytics: ' + error.message + '</p>';
+      }
+    }
+
+    function closeAnalytics() {
+      document.getElementById('analyticsModal').classList.remove('active');
+    }
+
+    function toggleRecord(index) {
+      const el = document.getElementById('record-' + index);
+      const arrow = document.getElementById('arrow-' + index);
+      if (el.style.display === 'none') {
+        el.style.display = 'block';
+        arrow.style.transform = 'rotate(180deg)';
+      } else {
+        el.style.display = 'none';
+        arrow.style.transform = 'rotate(0deg)';
+      }
+    }
+
+    function toggleData(index, type) {
+      const el = document.getElementById(type + '-' + index);
+      if (el.style.display === 'none') {
+        el.style.display = 'block';
+      } else {
+        el.style.display = 'none';
+      }
     }
 
     function downloadQR(url, slug) {
@@ -818,9 +972,53 @@ async function handleDeleteLink(request, env) {
 }
 
 /**
+ * Handle GET /api/analytics - Get analytics data for a slug
+ */
+async function handleGetAnalytics(url, env) {
+  try {
+    const slug = url.searchParams.get('slug');
+    
+    if (!slug) {
+      return new Response(JSON.stringify({ error: 'Slug parameter is required' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Fetch analytics data for the specified slug
+    const { results } = await env.DB.prepare(`
+      SELECT 
+        id, slug, timestamp,
+        ip_address, asn, as_organization,
+        continent, country, region, region_code, city, postal_code,
+        latitude, longitude, timezone, metro_code,
+        user_agent, referer, accept_language, accept_encoding, accept, connection,
+        request_method, request_url, query_string, http_protocol,
+        tls_version, tls_cipher,
+        cf_ray, cf_colo, cf_ipcountry, is_eu_country,
+        all_headers, cf_data_json
+      FROM analytics 
+      WHERE slug = ? 
+      ORDER BY timestamp DESC
+      LIMIT 100
+    `).bind(slug).all();
+
+    return new Response(JSON.stringify({ analytics: results }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  } catch (error) {
+    return new Response(JSON.stringify({ error: error.message }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+}
+
+/**
  * Handle GET /:slug - Redirect to destination URL
  */
-async function handleRedirect(slug, env) {
+async function handleRedirect(slug, env, request) {
   try {
     // Find the link in D1
     const link = await env.DB.prepare(
@@ -839,6 +1037,9 @@ async function handleRedirect(slug, env) {
       'UPDATE links SET clicks = clicks + 1 WHERE slug = ?'
     ).bind(slug).run();
 
+    // Capture visitor analytics
+    await captureAnalytics(slug, request, env);
+
     // Redirect to destination
     return Response.redirect(link.url, 302);
   } catch (error) {
@@ -848,3 +1049,128 @@ async function handleRedirect(slug, env) {
     });
   }
 }
+
+/**
+ * Capture comprehensive visitor analytics
+ */
+async function captureAnalytics(slug, request, env) {
+  try {
+    const headers = request.headers;
+    const cf = request.cf || {};
+    
+    // Get IP address (Cloudflare provides this)
+    const ipAddress = headers.get('CF-Connecting-IP') || 
+                      headers.get('X-Forwarded-For') || 
+                      headers.get('X-Real-IP') || 
+                      'unknown';
+    
+    // Network Information
+    const asn = cf.asn ? String(cf.asn) : null;
+    const asOrganization = cf.asOrganization || null;
+    
+    // Geographic Location (Cloudflare provides extensive geo data)
+    const continent = cf.continent || null;
+    const country = cf.country || headers.get('CF-IPCountry') || null;
+    const region = cf.region || null;
+    const regionCode = cf.regionCode || null;
+    const city = cf.city || null;
+    const postalCode = cf.postalCode || null;
+    const latitude = cf.latitude ? String(cf.latitude) : null;
+    const longitude = cf.longitude ? String(cf.longitude) : null;
+    const timezone = cf.timezone || null;
+    const metroCode = cf.metroCode ? String(cf.metroCode) : null;
+    
+    // Browser/Client Information
+    const userAgent = headers.get('User-Agent') || null;
+    const referer = headers.get('Referer') || null;
+    const acceptLanguage = headers.get('Accept-Language') || null;
+    const acceptEncoding = headers.get('Accept-Encoding') || null;
+    const accept = headers.get('Accept') || null;
+    const connection = headers.get('Connection') || null;
+    
+    // Request Details
+    const requestMethod = request.method || null;
+    const requestUrl = request.url || null;
+    const url = new URL(request.url);
+    const queryString = url.search || null;
+    const httpProtocol = cf.httpProtocol || null;
+    
+    // Security/TLS Information
+    const tlsVersion = cf.tlsVersion || null;
+    const tlsCipher = cf.tlsCipher || null;
+    
+    // Cloudflare Specific
+    const cfRay = headers.get('CF-Ray') || null;
+    const cfColo = cf.colo || null;
+    const cfCountry = headers.get('CF-IPCountry') || null;
+    const isEUCountry = cf.isEUCountry !== undefined ? String(cf.isEUCountry) : null;
+    
+    // Serialize all headers for comprehensive tracking
+    const allHeaders = {};
+    for (const [key, value] of headers.entries()) {
+      allHeaders[key] = value;
+    }
+    const allHeadersJson = JSON.stringify(allHeaders);
+    
+    // Serialize entire CF object for future reference
+    const cfDataJson = JSON.stringify(cf);
+    
+    // Current timestamp
+    const timestamp = new Date().toISOString();
+    
+    // Insert analytics data with ALL available information
+    await env.DB.prepare(`
+      INSERT INTO analytics (
+        slug, timestamp,
+        ip_address, asn, as_organization,
+        continent, country, region, region_code, city, postal_code,
+        latitude, longitude, timezone, metro_code,
+        user_agent, referer, accept_language, accept_encoding, accept, connection,
+        request_method, request_url, query_string, http_protocol,
+        tls_version, tls_cipher,
+        cf_ray, cf_colo, cf_ipcountry, cf_connecting_ip, is_eu_country,
+        all_headers, cf_data_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      slug,
+      timestamp,
+      ipAddress,
+      asn,
+      asOrganization,
+      continent,
+      country,
+      region,
+      regionCode,
+      city,
+      postalCode,
+      latitude,
+      longitude,
+      timezone,
+      metroCode,
+      userAgent,
+      referer,
+      acceptLanguage,
+      acceptEncoding,
+      accept,
+      connection,
+      requestMethod,
+      requestUrl,
+      queryString,
+      httpProtocol,
+      tlsVersion,
+      tlsCipher,
+      cfRay,
+      cfColo,
+      cfCountry,
+      ipAddress,
+      isEUCountry,
+      allHeadersJson,
+      cfDataJson
+    ).run();
+    
+  } catch (error) {
+    // Don't fail the redirect if analytics capture fails
+    console.error('Analytics capture error:', error);
+  }
+}
+
